@@ -1,0 +1,148 @@
+# Author: SSND
+# Description: Creates a /stats command to show mobs killed, blocks mined, distance traveled, and time played. Stats are saved and persist through world deletion.
+
+options:
+	# Which distance statistics to consider in the distance traveled.
+	distance_stat_names: "climb_one_cm", "crouch_one_cm", "fall_one_cm", "fly_one_cm", "sprint_one_cm", "swim_one_cm", "walk_one_cm", "walk_on_water_one_cm", "walk_under_water_one_cm", "boat_one_cm", "aviate_one_cm", "horse_one_cm", "minecart_one_cm", "pig_one_cm", and "strider_one_cm"
+	# How often to update/save statistics.
+	stat_update_interval: 10 seconds
+
+function create_stats_gui(player: player) :: inventory:
+	set {_gui} to a new chest inventory with 3 rows with name "- Statistics: <light red>%{_player}% <r>-"
+	
+	set {_filler_item} to black stained glass pane with nbt from "{hide_tooltip:{}}"
+	loop 27 times:
+		set slot loop-number - 1 of {_gui} to {_filler_item}
+
+	# Create statistic info items
+	set {_mob_kill_info} to 1 iron sword with nbt from "{""minecraft:attribute_modifiers"":{modifiers:[],show_in_tooltip:false},hide_additional_tooltip:{}}"
+	set name of {_mob_kill_info} to "<dark grey>========= <orange>Mobs Killed <dark grey>========="
+	set {_mob_kills} to {stats_command::stat_mob_kills::%{_player}'s uuid%}
+	set the 1st line of {_mob_kill_info}'s lore to "<white>You have killed a total of <red>%{_mob_kills}% <white>%plural("mob", {_mob_kills})%."
+
+	set {_blocks_mined_info} to 1 cobblestone
+	set name of {_blocks_mined_info} to "<dark grey>========= <orange>Blocks Mined <dark grey>========="
+	set {_blocks_mined} to {stats_command::stat_mined_blocks::%{_player}'s uuid%}
+	set the 1st line of {_blocks_mined_info}'s lore to "<white>You have mined a total of <light grey>%{_blocks_mined}% <white>%plural("block", {_blocks_mined})%."
+
+	set {_distance_traveled_info} to 1 compass
+	set name of {_distance_traveled_info} to "<dark grey>========= <orange>Distance Traveled <dark grey>========="
+	set {_distanced_traveled} to get_distance_traveled({_player})
+	set the 1st line of {_distance_traveled_info}'s lore to "<white>You have traveled a total of <lime>%{_distanced_traveled}% <white>%plural("meter", {_distance_traveled})%."
+
+	set {_playtime_info} to 1 clock
+	set name of {_playtime_info} to "<dark grey>==== <orange>Total Playtime <dark grey>===="
+	set {_playtime_data::*} to get_playtime_data({_player})
+	set the 1st line of {_playtime_info}'s lore to "<white>You've played for..."
+	set the 2nd line of {_playtime_info}'s lore to "<dark grey>- <yellow>%{_playtime_data::1}% <grey>%plural("day", {_playtime_data::1})%"
+	set the 3rd line of {_playtime_info}'s lore to "<dark grey>- <yellow>%{_playtime_data::2}% <grey>%plural("hour", {_playtime_data::2})%"
+	set the 4th line of {_playtime_info}'s lore to "<dark grey>- <yellow>%{_playtime_data::3}% <grey>%plural("minute", {_playtime_data::3})%"
+	set the 5th line of {_playtime_info}'s lore to "<dark grey>- <yellow>%{_playtime_data::4}% <grey>%plural("second", {_playtime_data::4})%"
+
+	set slot 10 of {_gui} to {_mob_kill_info}
+	set slot 12 of {_gui} to {_blocks_mined_info}
+	set slot 14 of {_gui} to {_distance_traveled_info}
+	set slot 16 of {_gui} to {_playtime_info}
+
+	return {_gui}
+
+
+function plural(str: text, count: number) :: text:
+	if {_count} is equal to 1:
+		return {_str}
+	
+	add "s" to {_str}
+	return {_str}
+
+
+function process_stat_changes(player: player):
+	loop {@distance_stat_names}:
+		if (loop-value parsed as statistic) stat of {_player} is less than {stats_command::%loop-value%::%{_player}'s uuid%}:
+			set (loop-value parsed as statistic) stat of {_player} to {stats_command::%loop-value%::%{_player}'s uuid%}
+		else:
+			set {stats_command::%loop-value%::%{_player}'s uuid%} to (loop-value parsed as statistic) stat of {_player}
+
+	if mob_kills stat of {_player} is less than {stats_command::stat_mob_kills::%{_player}'s uuid%}:
+		set mob_kills stat of {_player} to {stats_command::stat_mob_kills::%{_player}'s uuid%}
+	else:
+		set {stats_command::stat_mob_kills::%{_player}'s uuid%} to mob_kills stat of {_player}
+	
+	if play_one_minute stat of {_player} is less than {stats_command::stat_playtime_ticks::%{_player}'s uuid%}:
+		set play_one_minute stat of {_player} to {stats_command::stat_playtime_ticks::%{_player}'s uuid%}
+	else:
+		set {stats_command::stat_playtime_ticks::%{_player}'s uuid%} to play_one_minute stat of {_player}
+
+
+function get_distance_traveled(player: player) :: number:
+	set {_distance} to 0
+
+	loop {@distance_stat_names}:
+		add (loop-value parsed as statistic) stat of {_player} to {_distance}
+
+	return rounded {_distance} / 100
+
+
+function get_playtime_data(player: player) :: numbers:
+	set {_playtime} to "%play_one_minute stat of {_player}% ticks" parsed as timespan
+
+	set {_playtime_data::1} to days of {_playtime}
+	set {_playtime_data::2} to mod(hours of {_playtime}, 24)
+	set {_playtime_data::3} to mod(minutes of {_playtime}, 60)
+	set {_playtime_data::4} to mod(seconds of {_playtime}, 60)
+
+	return {_playtime_data::*}
+
+
+command /stats [<p: player = %player%>]:
+	permission: talecraft.sk.command.stats
+	executable by: players
+	trigger:
+		if {_p} is not player:
+			if player does not have permission "talecraft.sk.command.stats.others":
+				message "<light red>You do not have permission to view another player's statistics."
+				stop
+			
+		set {_gui} to create_stats_gui({_p})
+		add {_gui} to {stats_command::open_stat_guis::*}
+		open {_gui} for player
+
+
+# GUI Listeners
+
+on inventory click:
+	if {stats_command::open_stat_guis::*} contains event-inventory:
+		cancel event
+
+on inventory close:
+	{stats_command::open_stat_guis::*} contains event-inventory
+	remove event-inventory from {stats_command::open_stat_guis::*}
+
+
+# Statistic Listeners
+on join:
+	if {stats_command::stat_mined_blocks::%event-player's uuid%} is not set:
+		set {stats_command::stat_mined_blocks::%event-player's uuid%} to 0
+	if {stats_command::stat_mob_kills::%event-player's uuid%} is not set:
+		set {stats_command::stat_mob_kills::%event-player's uuid%} to 0
+
+on block break:
+	add 1 to {stats_command::stat_mined_blocks::%event-player's uuid%}
+
+on death:
+	victim is not a player
+	attacker is a player
+	add 1 to {stats_command::stat_mob_kills::%attacker's uuid%}
+
+every {@stat_update_interval}:
+	loop all players:
+		broadcast "Updated %loop-player%'s stat info"
+		process_stat_changes(loop-player)
+
+on unload:
+	# Close all opened statistic GUIs and delete them
+	loop {stats_command::open_stat_guis::*}:
+		loop viewers of loop-value:
+			close the inventory of loop-value-2
+	clear {stats_command::open_stat_guis::*}
+
+	log "Unloaded %script%"
