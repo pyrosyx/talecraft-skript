@@ -1,5 +1,6 @@
 # Author: SSND
 # Description: Creates a /stats command to show mobs killed, blocks mined, distance traveled, and time played. Stats are saved and persist through world deletion.
+# Dependencies: SkBee (for retrieving player statistics)
 
 options:
 	# Which distance statistics to consider in the distance traveled.
